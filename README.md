@@ -25,3 +25,5 @@ Add `build` script to `pakage.json`
 ```
 
 Use `npm run build` to compile JSX from `src` folder to `public`
+
+Webpack-dev-server setup [webpack-dev-server](https://loftblog.ru/material/15777/)
