@@ -1,11 +1,14 @@
 let nextUnitOfWork = null;
+let wipRoot = null;
+
+const isObject = value => value === Object(value);
 
 const createElement = (type, props, ...children) => ({
   type,
   props: {
     ...props,
     children: children.map(child =>
-      typeof child === "object"
+      isObject(child)
         ? child
         : {
             type: "TEXT_ELEMENT",
@@ -18,14 +21,15 @@ const createElement = (type, props, ...children) => ({
   }
 });
 
+const isEvent = key => key.startsWith("on");
+const isProperty = key => key !== "children";
+
 function createDom(fiber) {
   const dom =
     fiber.type === "TEXT_ELEMENT"
       ? document.createTextNode("")
       : document.createElement(fiber.type);
 
-  const isEvent = key => key.startsWith("on");
-  const isProperty = key => key !== "children";
   Object.keys(fiber.props)
     .filter(isProperty)
     .forEach(name => {
@@ -42,13 +46,29 @@ function createDom(fiber) {
 
 function workLoop(deadline) {
   let shouldYield = false;
-  while (nextUnitOfWork) {
-    if (!shouldYield) {
-      nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
-      shouldYield = deadline.timeRemaining() < 1;
-    }
-    requestIdleCallback(workLoop);
+  while (nextUnitOfWork && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    shouldYield = deadline.timeRemaining() < 1;
   }
+
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot();
+  }
+  requestIdleCallback(workLoop);
+}
+
+function commitRoot() {
+  commitWork(wipRoot.child);
+  wipRoot = null;
+}
+
+function commitWork(fiber) {
+  if (!fiber) return;
+
+  const domParent = fiber.parent.dom;
+  domParent.appendChild(fiber.dom);
+  commitWork(fiber.child);
+  commitWork(fiber.sibling);
 }
 
 function performUnitOfWork(fiber) {
@@ -92,13 +112,15 @@ function performUnitOfWork(fiber) {
 }
 
 function render(element, container) {
-  container.innerHTML = "";
-  nextUnitOfWork = {
+  container.innerHTML = null;
+  wipRoot = {
     dom: container,
     props: {
       children: [element]
     }
   };
+  nextUnitOfWork = wipRoot;
+
   requestIdleCallback(workLoop);
 }
 
