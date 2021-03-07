@@ -91,11 +91,19 @@ function commitWork(fiber) {
   }
   const domParent = domParentFiber.dom;
 
-  if (fiber.effectTag === "PLACEMENT" && fiber.dom != null) {
-    domParent.appendChild(fiber.dom);
-  } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
-    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+  if (fiber.effectTag === "PLACEMENT") {
+    if (fiber.dom != null) {
+      domParent.appendChild(fiber.dom);
+    }
+    runEffects(fiber);
+  } else if (fiber.effectTag === "UPDATE") {
+    cancelEffects(fiber);
+    if (fiber.dom != null) {
+      updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+    }
+    runEffects(fiber);
   } else if (fiber.effectTag === "DELETION") {
+    cancelEffects(fiber);
     commitDeletion(fiber, domParent);
   }
 
@@ -158,9 +166,93 @@ function performUnitOfWork(fiber) {
   }
 }
 
+let wipFiber = null;
+let hookIndex = null;
+
 function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
   const children = [fiber.type(fiber.props)];
   reconcileChildren(fiber, children);
+}
+
+function useState(initial) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+
+  const hook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: []
+  };
+
+  const actions = oldHook ? oldHook.queue : [];
+  actions.forEach(action => {
+    hook.state = action(hook.state);
+  });
+
+  const setState = action => {
+    hook.queue.push(action);
+    wipRoot = {
+      dom: currentRoot.dom,
+      props: currentRoot.props,
+      alternate: currentRoot
+    };
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  };
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
+
+  return [hook.state, setState];
+}
+
+const hasDepsChanged = (prevDeps, nextDeps) =>
+  !prevDeps ||
+  !nextDeps ||
+  prevDeps.length !== nextDeps.length ||
+  prevDeps.some((dep, index) => dep !== nextDeps[index]);
+
+function cancelEffects(fiber) {
+  if (fiber.hooks) {
+    fiber.hooks
+      .filter(hook => hook.tag === "effect" && hook.cancel)
+      .forEach(effectHook => {
+        effectHook.cancel();
+      });
+  }
+}
+
+function runEffects(fiber) {
+  if (fiber.hooks) {
+    fiber.hooks
+      .filter(hook => hook.tag === "effect" && hook.effect)
+      .forEach(effectHook => {
+        effectHook.cancel = effectHook.effect();
+      });
+  }
+}
+
+function useEffect(effect, deps) {
+  const oldHook =
+    wipFiber.alternate &&
+    wipFiber.alternate.hooks &&
+    wipFiber.alternate.hooks[hookIndex];
+
+  const hasChanged = hasDepsChanged(oldHook ? oldHook.deps : undefined, deps);
+
+  const hook = {
+    tag: "effect",
+    effect: hasChanged ? effect : null,
+    cancel: hasChanged && oldHook && oldHook.cancel,
+    deps
+  };
+
+  wipFiber.hooks.push(hook);
+  hookIndex++;
 }
 
 function updateHostComponent(fiber) {
@@ -223,7 +315,9 @@ function reconcileChildren(wipFiber, elements) {
 
 const Reactik = {
   createElement,
-  render
+  render,
+  useState,
+  useEffect
 };
 
 export default Reactik;

@@ -3,48 +3,28 @@ import Reactik from "./reactic";
 /** @jsx Reactik.createElement */
 const container = document.getElementById("root");
 
-const App = (text, value) => {
-  const element = (
-    <div>
-      <h2>My favourite language is {text}</h2>
+const App = () => {
+  function Counter() {
+    const [state, setState] = Reactik.useState(1);
+
+    Reactik.useEffect(() => {
+      console.log(state);
+    }, [state]);
+
+    Reactik.useEffect(() => {
+      console.log("Component did mount.");
+    }, []);
+
+    return (
       <div>
-        <label htmlFor="languages">Choose your favourite language: </label>
-        <select
-          onChange={({ target: { value: newText } }) => App(newText, value)}
-          name="languages"
-          id="languages"
-        >
-          <option value="Java Script" selected={"Java Script" === text}>
-            Java Script
-          </option>
-          <option value="Coffee Script" selected={"Coffee Script" === text}>
-            Coffee Script
-          </option>
-          <option value="Type Script" selected={"Type Script" === text}>
-            Type Script
-          </option>
-        </select>
+        <h1>State: {state}</h1>
+        <button onClick={() => setState(c => c + 1)}>Increment</button>
+        <button onClick={() => setState(c => c - 1)}>Decrement</button>
       </div>
-      <div>
-        <input
-          type="checkbox"
-          id="joke"
-          name="joke"
-          checked={value === "Coffee Script"}
-          disabled={true}
-        />
-        <label htmlFor="joke">I'm joking</label>
-      </div>
-      <div>
-        <input
-          onInput={({ target: { value: newValue } }) => App(text, newValue)}
-          value={value}
-        />
-        <h2>Hello {value}</h2>
-      </div>
-    </div>
-  );
+    );
+  }
+  const element = <Counter />;
   Reactik.render(element, container);
 };
 
-App("Java Script");
+App();
